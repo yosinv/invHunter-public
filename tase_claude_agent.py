@@ -31,7 +31,7 @@ load_dotenv()
 # CONFIG — edit these
 # ─────────────────────────────────────────────
 PAPER_TRADING = True           # True = paper (port 7497), False = live (port 7496)
-MAX_POSITION_ILS = 5000        # Max ₪ per single trade (hard limit, Claude cannot exceed this)
+MAX_POSITION_ILS = 10000       # Max ₪ per single trade (hard limit, Claude cannot exceed this)
 PORTFOLIO_ILS = 50000          # Your total portfolio size in ₪
 RISK_LEVEL = "medium"          # "low" | "medium" | "high"
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
@@ -42,9 +42,17 @@ WATCHLIST = [
     "TEVA",   # Teva Pharmaceutical
     "NICE",   # NICE Systems
     "ESLT",   # Elbit Systems
-    "CHKP",   # Check Point (dual listed)
+    # "CHKP",   # Check Point — NYSE only, no TASE listing
     "POLI",   # Bank HaPoalim
     "LUMI",   # Bank Leumi
+    "ARYT",   # Aryt Industries Ltd
+    "RPOL",   # RP Optical Lab Ltd
+    "IMCO",   # Imco Industries Ltd
+    "NXSN",   # Next Vision Stabilized Systems
+    "AVGL",   # Avi-Gail (defense)
+    "REKA",   # Reka Defense
+    "EMDV",   # Elad Defense
+    "KARE",   # Kareen (defense electronics)
 ]
 
 # ─────────────────────────────────────────────
