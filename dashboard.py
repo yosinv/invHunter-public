@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import anthropic
+from ib_insync import IB, Stock, LimitOrder
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 WATCHLIST = [
@@ -135,6 +136,13 @@ with st.sidebar:
     st.markdown("**Filter by sector:**")
     sectors = ["All"] + sorted(set(SECTOR_MAP.values()))
     selected_sector = st.selectbox("Sector", sectors)
+    st.divider()
+    st.markdown("**IBKR Connection**")
+    paper_mode = st.toggle("Paper Trading", value=True)
+    ibkr_port = 7497 if paper_mode else 7496
+    st.caption(f"Port: {ibkr_port} ({'📄 Paper' if paper_mode else '💰 LIVE'})")
+    if not paper_mode:
+        st.error("⚠️ LIVE MODE — real money")
     st.divider()
     st.markdown("**Settings**")
     st.metric("Portfolio", f"₪{PORTFOLIO_ILS:,}")
@@ -257,18 +265,68 @@ if run_analysis:
     progress.empty()
     st.session_state["analysis"] = results
 
+def place_order_ibkr(ticker: str, action: str, quantity: int, limit_price: float, port: int) -> str:
+    """Connect to IBKR TWS and place a limit order. Returns status message."""
+    if quantity <= 0 or not limit_price:
+        return "❌ Invalid order — no quantity or price"
+    order_value = quantity * limit_price
+    if order_value > MAX_POSITION_ILS:
+        return f"❌ Order value ₪{order_value:,.0f} exceeds max ₪{MAX_POSITION_ILS:,}"
+    try:
+        ib = IB()
+        ib.connect("127.0.0.1", port, clientId=20)
+        contract = Stock(ticker, "TASE", "ILS")
+        ib.qualifyContracts(contract)
+        order = LimitOrder(action.upper(), quantity, round(limit_price, 2))
+        order.tif = "DAY"
+        trade = ib.placeOrder(contract, order)
+        ib.sleep(1)
+        ib.disconnect()
+        return f"✅ Order placed: {action.upper()} {quantity}x {ticker} @ ₪{limit_price:,.2f} (₪{order_value:,.0f})"
+    except Exception as e:
+        return f"❌ IBKR error: {e}"
+
+
 if "analysis" in st.session_state:
     results = st.session_state["analysis"]
     res_df = pd.DataFrame(results)
 
-    # BUY signals highlighted
+    # ── BUY signals — individual approve/reject ────────────────────────────────
     buys = res_df[res_df["Action"] == "BUY"]
     if not buys.empty:
-        st.success(f"🟢 {len(buys)} BUY signal(s)")
-        st.dataframe(buys, use_container_width=True, hide_index=True)
+        st.success(f"🟢 {len(buys)} BUY signal(s) — review and execute below")
+
+        for _, row in buys.iterrows():
+            ticker = row["Ticker"]
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns([2, 2, 2, 3])
+                c1.metric(ticker, f"₪{row['Price (₪)']:,.2f}", f"{row['Change %']:+.2f}%")
+                c2.metric("Qty", int(row["Qty"]))
+                c3.metric("Limit", f"₪{row['Limit (₪)']:,.2f}" if row["Limit (₪)"] else "—")
+                c4.metric("Stop", f"₪{row['Stop (₪)']:,.2f}" if row["Stop (₪)"] else "—")
+                st.caption(f"Confidence: **{row['Confidence']}** — {row['Reasoning']}")
+
+                order_value = (row["Qty"] or 0) * (row["Limit (₪)"] or 0)
+                st.caption(f"Order value: ₪{order_value:,.0f}  |  Mode: {'📄 Paper' if paper_mode else '💰 LIVE'}")
+
+                col_exec, col_skip = st.columns([1, 4])
+                if col_exec.button(f"Execute {ticker}", key=f"exec_{ticker}", type="primary"):
+                    with st.spinner(f"Sending order for {ticker} to IBKR..."):
+                        result = place_order_ibkr(
+                            ticker, "BUY",
+                            int(row["Qty"]),
+                            row["Limit (₪)"],
+                            ibkr_port
+                        )
+                    if "✅" in result:
+                        st.success(result)
+                    else:
+                        st.error(result)
+                col_skip.button(f"Skip {ticker}", key=f"skip_{ticker}")
     else:
         st.info("⚪ No BUY signals")
 
+    st.divider()
     st.markdown("**All decisions:**")
 
     def action_color(val):
