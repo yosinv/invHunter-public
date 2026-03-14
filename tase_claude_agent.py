@@ -23,6 +23,9 @@ import pandas as pd
 import yfinance as yf
 from ib_insync import IB, Stock, LimitOrder, util
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─────────────────────────────────────────────
 # CONFIG — edit these
@@ -31,7 +34,7 @@ PAPER_TRADING = True           # True = paper (port 7497), False = live (port 74
 MAX_POSITION_ILS = 5000        # Max ₪ per single trade (hard limit, Claude cannot exceed this)
 PORTFOLIO_ILS = 50000          # Your total portfolio size in ₪
 RISK_LEVEL = "medium"          # "low" | "medium" | "high"
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "your-key-here")
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 # TASE stocks to watch (append .TA for yfinance, use base ticker for IBKR)
 WATCHLIST = [
