@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import anthropic
-from ib_insync import IB, Stock, LimitOrder
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 WATCHLIST = [
@@ -273,13 +272,16 @@ def place_order_ibkr(ticker: str, action: str, quantity: int, limit_price: float
     if order_value > MAX_POSITION_ILS:
         return f"❌ Order value ₪{order_value:,.0f} exceeds max ₪{MAX_POSITION_ILS:,}"
     try:
+        import asyncio
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        from ib_insync import IB, Stock, LimitOrder
         ib = IB()
         ib.connect("127.0.0.1", port, clientId=20)
         contract = Stock(ticker, "TASE", "ILS")
         ib.qualifyContracts(contract)
         order = LimitOrder(action.upper(), quantity, round(limit_price, 2))
         order.tif = "DAY"
-        trade = ib.placeOrder(contract, order)
+        ib.placeOrder(contract, order)
         ib.sleep(1)
         ib.disconnect()
         return f"✅ Order placed: {action.upper()} {quantity}x {ticker} @ ₪{limit_price:,.2f} (₪{order_value:,.0f})"
