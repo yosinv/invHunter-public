@@ -21,6 +21,7 @@ import anthropic
 WATCHLIST = [
     "BEZQ", "TEVA", "NICE", "ESLT", "POLI", "LUMI",
     "ARYT", "RPOL", "IMCO", "NXSN", "AVGL", "REKA", "EMDV", "KARE",
+    "EVGN", "MDIN",
 ]
 PORTFOLIO_ILS = 50000
 MAX_POSITION_ILS = 10000
@@ -32,6 +33,7 @@ SECTOR_MAP = {
     "ARYT": "Defense", "RPOL": "Defense / Optics", "IMCO": "Industrial",
     "NXSN": "Defense / Optics", "AVGL": "Defense", "REKA": "Defense",
     "EMDV": "Defense", "KARE": "Defense Electronics",
+    "EVGN": "Biotech", "MDIN": "Real Estate",
 }
 
 # ─── Page setup ───────────────────────────────────────────────────────────────
@@ -56,7 +58,8 @@ def fetch_all_prices():
             info = stock.info
             if hist.empty:
                 continue
-            closes = hist["Close"]
+            # yfinance returns TASE prices in agorot — convert to ILS (÷100)
+            closes = hist["Close"] / 100
             sma5 = closes.rolling(5).mean().iloc[-1]
             sma20 = closes.rolling(20).mean().iloc[-1]
             current = closes.iloc[-1]

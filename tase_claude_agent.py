@@ -53,6 +53,8 @@ WATCHLIST = [
     "REKA",   # Reka Defense
     "EMDV",   # Elad Defense
     "KARE",   # Kareen (defense electronics)
+    "EVGN",   # Evogene (אבוג'ן)
+    "MDIN",   # Modiin Yehsh (מודיעין יהש)
 ]
 
 # ─────────────────────────────────────────────
@@ -84,8 +86,8 @@ def get_stock_data(ticker: str) -> dict:
             log.warning(f"No data for {ticker}")
             return None
 
-        # Calculate simple indicators
-        closes = hist["Close"]
+        # yfinance returns TASE prices in agorot — convert to ILS (÷100)
+        closes = hist["Close"] / 100
         sma5 = closes.rolling(5).mean().iloc[-1]
         sma20 = closes.rolling(20).mean().iloc[-1]
         current_price = closes.iloc[-1]
