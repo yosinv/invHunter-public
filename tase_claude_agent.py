@@ -55,6 +55,17 @@ WATCHLIST = [
     "KARE",   # Kareen (defense electronics)
     "EVGN",   # Evogene (אבוג'ן)
     "MDIN",   # Modiin Yehsh (מודיעין יהש)
+    # ── Defense & Security Tech ──────────────────
+    "DRAL",   # Drall Electronic Industries
+    "PLSN",   # Plasan (armor & protection systems)
+    "ISRS",   # Israel Shipyards (naval defense)
+    "TDRN",   # Tadiran Electronic Industries (defense comms)
+    "CYBR",   # CyberArk (cyber defense)
+    "GILT",   # Gilat Satellite Networks
+    "SPEN",   # SpaceCom (satellite comms)
+    "RATI",   # Rati (defense electronics)
+    "CAMT",   # Camtek (defense-grade inspection systems)
+    "NVMI",   # Nova Measuring Instruments (defense-grade semicon)
 ]
 
 # ─────────────────────────────────────────────

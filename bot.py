@@ -31,6 +31,8 @@ WATCHLIST = [
     "BEZQ", "TEVA", "NICE", "ESLT", "POLI", "LUMI",
     "ARYT", "RPOL", "IMCO", "NXSN", "AVGL", "REKA", "EMDV", "KARE",
     "EVGN", "MDIN",
+    "DRAL", "PLSN", "ISRS", "TDRN", "CYBR",
+    "GILT", "SPEN", "RATI", "CAMT", "NVMI",
 ]
 PORTFOLIO_ILS = 50000
 MAX_POSITION_ILS = 10000

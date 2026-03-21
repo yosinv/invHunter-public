@@ -22,6 +22,8 @@ WATCHLIST = [
     "BEZQ", "TEVA", "NICE", "ESLT", "POLI", "LUMI",
     "ARYT", "RPOL", "IMCO", "NXSN", "AVGL", "REKA", "EMDV", "KARE",
     "EVGN", "MDIN",
+    "DRAL", "PLSN", "ISRS", "TDRN", "CYBR",
+    "GILT", "SPEN", "RATI", "CAMT", "NVMI",
 ]
 PORTFOLIO_ILS = 50000
 MAX_POSITION_ILS = 10000
@@ -34,6 +36,11 @@ SECTOR_MAP = {
     "NXSN": "Defense / Optics", "AVGL": "Defense", "REKA": "Defense",
     "EMDV": "Defense", "KARE": "Defense Electronics",
     "EVGN": "Biotech", "MDIN": "Real Estate",
+    "DRAL": "Defense", "PLSN": "Defense", "ISRS": "Defense / Naval",
+    "TDRN": "Defense / Comms", "CYBR": "Cyber Security",
+    "GILT": "Defense / Satellite", "SPEN": "Defense / Satellite",
+    "RATI": "Defense Electronics", "CAMT": "Defense Tech",
+    "NVMI": "Defense Tech",
 }
 
 # ─── Page setup ───────────────────────────────────────────────────────────────
