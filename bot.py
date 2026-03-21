@@ -11,6 +11,7 @@ Commands:
 import os
 import json
 import re
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -182,7 +183,7 @@ async def cmd_run(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             results.append({"ticker": ticker, "action": "error", "confidence": "—", "reasoning": "No data"})
             continue
         try:
-            d = await ctx.application.loop.run_in_executor(None, ask_claude, data)
+            d = await asyncio.to_thread(ask_claude, data)
             results.append({
                 "ticker": ticker,
                 "action": d["action"],
