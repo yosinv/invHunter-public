@@ -301,6 +301,34 @@ if run_analysis:
     progress.empty()
     st.session_state["analysis"] = results
 
+    # Auto-save to analysis/ folder
+    from pathlib import Path
+    analysis_dir = Path(__file__).parent / "analysis"
+    analysis_dir.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    save_path = analysis_dir / f"{ts}.json"
+    save_data = {
+        "timestamp": datetime.now().isoformat(),
+        "portfolio_ils": PORTFOLIO_ILS,
+        "max_position_ils": MAX_POSITION_ILS,
+        "results": [
+            {
+                "ticker": r["Ticker"],
+                "action": r["Action"].lower(),
+                "quantity": r["Qty"],
+                "limit_price_ils": r["Limit (₪)"],
+                "stop_loss_ils": r["Stop (₪)"],
+                "confidence": r["Confidence"],
+                "reasoning": r["Reasoning"],
+                "price_ils": r["Price (₪)"],
+                "pct_change": r["Change %"],
+            }
+            for r in results
+        ],
+    }
+    save_path.write_text(json.dumps(save_data, indent=2, default=str))
+    st.toast(f"💾 Saved: {save_path.name}", icon="✅")
+
 def place_order_ibkr(ticker: str, action: str, quantity: int, limit_price: float, port: int) -> str:
     """Connect to IBKR TWS and place a limit order. Returns status message."""
     if quantity <= 0 or not limit_price:
