@@ -8,6 +8,7 @@ import json
 import re
 import time
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -139,6 +140,7 @@ Respond with this exact JSON:
 with st.sidebar:
     st.header("Controls")
     run_analysis = st.button("🤖 Run Claude Analysis", type="primary", use_container_width=True)
+    show_last = st.button("📂 Show Latest Analysis", use_container_width=True)
     refresh = st.button("🔄 Refresh Prices", use_container_width=True)
     st.divider()
     st.markdown("**Filter by sector:**")
@@ -221,6 +223,32 @@ styled = display_df.style \
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
 st.divider()
+
+# ─── Load latest saved analysis ───────────────────────────────────────────────
+if show_last:
+    analysis_dir = Path(__file__).parent / "analysis"
+    files = sorted(analysis_dir.glob("*.json"), reverse=True) if analysis_dir.exists() else []
+    if not files:
+        st.warning("No saved analysis found. Run Claude Analysis first.")
+    else:
+        saved = json.loads(files[0].read_text())
+        ts = saved.get("timestamp", "")[:19].replace("T", " ")
+        st.success(f"📂 Loaded: **{files[0].name}** — {ts}")
+        st.session_state["analysis"] = [
+            {
+                "Ticker": r["ticker"],
+                "Sector": SECTOR_MAP.get(r["ticker"], "—"),
+                "Price (₪)": r.get("price_ils", 0),
+                "Change %": r.get("pct_change", 0),
+                "Action": r["action"].upper(),
+                "Qty": r.get("quantity", 0),
+                "Limit (₪)": r.get("limit_price_ils"),
+                "Stop (₪)": r.get("stop_loss_ils"),
+                "Confidence": r.get("confidence", "—"),
+                "Reasoning": r.get("reasoning", ""),
+            }
+            for r in saved.get("results", [])
+        ]
 
 # ─── Claude Analysis ──────────────────────────────────────────────────────────
 st.subheader("🤖 Claude Analysis")
