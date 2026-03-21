@@ -16,6 +16,7 @@ Setup:
 
 import os
 import json
+import re
 import time
 import logging
 from datetime import datetime
@@ -170,6 +171,8 @@ Respond with this exact JSON format:
             system=system_prompt
         )
         raw = response.content[0].text.strip()
+        raw = re.sub(r"^```json?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
         decision = json.loads(raw)
         log.info(f"Claude decision for {stock_data['ticker']}: {decision}")
         return decision

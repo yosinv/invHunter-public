@@ -5,6 +5,7 @@ Run: streamlit run dashboard.py
 
 import os
 import json
+import re
 import time
 from datetime import datetime
 
@@ -129,10 +130,8 @@ Respond with this exact JSON:
 }}"""}]
     )
     raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+    raw = re.sub(r"^```json?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
     return json.loads(raw)
 
 
