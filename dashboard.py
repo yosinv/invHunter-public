@@ -5,11 +5,13 @@ Run: streamlit run dashboard.py
 
 import os
 import json
+import math
 import re
 import time
 from datetime import datetime
 from pathlib import Path
 
+import networkx as nx
 import pandas as pd
 import requests
 import streamlit as st
@@ -538,3 +540,214 @@ else:
 
     st.dataframe(styled_pm, use_container_width=True, hide_index=True)
     st.caption(f"Showing {len(filtered)} of {len(pm_df)} active markets · Refreshes every 5 min")
+
+st.divider()
+
+# ─── Graph Arbitrage Scanner ───────────────────────────────────────────────────
+st.subheader("🕸️ Graph Arbitrage Scanner")
+st.caption("Detects probability violations across related Polymarket markets using graph theory")
+
+# Topics used to detect logical relationships between markets
+ENTITY_KEYWORDS = {
+    "trump":      ["trump", "donald", "white house", "oval office"],
+    "iran":       ["iran", "iranian", "tehran"],
+    "russia":     ["russia", "russian", "putin", "ukraine", "moscow"],
+    "china":      ["china", "chinese", "beijing", "taiwan", "xi jinping"],
+    "israel":     ["israel", "israeli", "gaza", "hamas", "netanyahu", "idf", "west bank"],
+    "fed":        ["federal reserve", "fed rate", "fomc", "interest rate", "powell"],
+    "inflation":  ["inflation", "cpi", "pce", "deflation", "price index"],
+    "recession":  ["recession", "gdp", "economic contraction", "unemployment"],
+    "bitcoin":    ["bitcoin", "btc", "crypto", "ethereum", "eth"],
+    "election":   ["election", "vote", "ballot", "democrat", "republican", "senate", "congress"],
+    "war":        ["war", "conflict", "military", "invasion", "attack", "strike"],
+    "ai":         ["artificial intelligence", "ai ", "openai", "chatgpt", "llm"],
+}
+
+
+def get_entities(question: str) -> frozenset:
+    q = question.lower()
+    return frozenset(k for k, kws in ENTITY_KEYWORDS.items() if any(kw in q for kw in kws))
+
+
+@st.cache_data(ttl=300)
+def fetch_markets_for_arb(limit: int = 300):
+    try:
+        resp = requests.get(
+            "https://gamma-api.polymarket.com/markets",
+            params={"limit": limit, "active": "true", "closed": "false"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception as e:
+        return [], str(e)
+
+    nodes = []
+    for m in raw:
+        outcomes = m.get("outcomes", "[]")
+        if isinstance(outcomes, str):
+            try: outcomes = json.loads(outcomes)
+            except: outcomes = []
+        prices = m.get("outcomePrices", "[]")
+        if isinstance(prices, str):
+            try: prices = json.loads(prices)
+            except: prices = []
+
+        yes_prob = None
+        if len(outcomes) == 2 and len(prices) == 2:
+            for idx, o in enumerate(outcomes):
+                if str(o).lower() == "yes":
+                    try: yes_prob = float(prices[idx])
+                    except: pass
+
+        if yes_prob is None or yes_prob <= 0 or yes_prob >= 1:
+            continue
+
+        entities = get_entities(m.get("question", ""))
+        if not entities:
+            continue
+
+        vol = m.get("volumeNum") or m.get("volume") or 0
+        try: vol = float(vol)
+        except: vol = 0.0
+
+        nodes.append({
+            "id":       m.get("id", ""),
+            "question": m.get("question", ""),
+            "yes_prob": yes_prob,
+            "entities": entities,
+            "volume":   vol,
+            "url":      m.get("url", ""),
+        })
+
+    return nodes, None
+
+
+def scan_arbitrage(nodes: list, min_gap: float = 0.15, min_vol: float = 0):
+    G = nx.DiGraph()
+
+    for i, n in enumerate(nodes):
+        G.add_node(i, **{k: v for k, v in n.items() if k != "entities"})
+
+    violations = []
+    edges_added = 0
+
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            a, b = nodes[i], nodes[j]
+            shared = a["entities"] & b["entities"]
+            if not shared:
+                continue
+
+            pa, pb = a["yes_prob"], b["yes_prob"]
+            diff = abs(pa - pb)
+
+            # Add directed edges with -log(p) weights (Bellman-Ford arb detection)
+            G.add_edge(i, j, weight=-math.log(pb), shared=shared)
+            G.add_edge(j, i, weight=-math.log(pa), shared=shared)
+            edges_added += 1
+
+            # Flag pairs where probabilities are suspiciously far apart
+            if diff >= min_gap:
+                higher = a if pa >= pb else b
+                lower  = b if pa >= pb else a
+                if min(higher["volume"], lower["volume"]) >= min_vol:
+                    violations.append({
+                        "Topic":      ", ".join(sorted(shared)),
+                        "Market A":   higher["question"][:90],
+                        "P(A) %":     round(higher["yes_prob"] * 100, 1),
+                        "Market B":   lower["question"][:90],
+                        "P(B) %":     round(lower["yes_prob"] * 100, 1),
+                        "Gap %":      round(diff * 100, 1),
+                        "Vol A ($)":  round(higher["volume"]),
+                        "Vol B ($)":  round(lower["volume"]),
+                    })
+
+    violations.sort(key=lambda x: x["Gap %"], reverse=True)
+
+    # Negative cycle detection via Bellman-Ford (samples connected subgraphs)
+    neg_cycles = 0
+    seen_nodes = set()
+    for start in list(G.nodes()):
+        if start in seen_nodes:
+            continue
+        component = nx.descendants(G, start) | {start}
+        seen_nodes |= component
+        sub = G.subgraph(component).copy()
+        try:
+            nx.find_negative_cycle(sub, start)
+            neg_cycles += 1
+        except nx.NetworkXError:
+            pass
+        except nx.exception.NetworkXUnbounded:
+            neg_cycles += 1
+
+    return violations, neg_cycles, edges_added
+
+
+if "arb_results" not in st.session_state:
+    st.session_state["arb_results"] = None
+
+arb_col1, arb_col2, arb_col3 = st.columns([2, 2, 1])
+with arb_col1:
+    min_gap_pct = st.slider("Min probability gap %", 5, 50, 15, 5)
+with arb_col2:
+    min_vol_k = st.slider("Min volume per market ($k)", 0, 500, 0, 10)
+with arb_col3:
+    run_arb = st.button("🔍 Scan for Arb", type="primary", use_container_width=True)
+
+if run_arb:
+    with st.spinner("Fetching 300 markets and building probability graph…"):
+        arb_nodes, arb_err = fetch_markets_for_arb(300)
+    if arb_err:
+        st.error(f"Fetch error: {arb_err}")
+    else:
+        with st.spinner(f"Scanning {len(arb_nodes)} markets for probability violations…"):
+            viols, neg_cyc, n_edges = scan_arbitrage(
+                arb_nodes,
+                min_gap=min_gap_pct / 100,
+                min_vol=min_vol_k * 1000,
+            )
+        st.session_state["arb_results"] = {
+            "violations": viols,
+            "neg_cycles": neg_cyc,
+            "n_edges": n_edges,
+            "n_nodes": len(arb_nodes),
+        }
+
+if st.session_state["arb_results"]:
+    r = st.session_state["arb_results"]
+    viols = r["violations"]
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Markets scanned",        r["n_nodes"])
+    m2.metric("Relationships mapped",   r["n_edges"])
+    m3.metric("Violations found",       len(viols))
+    m4.metric("Negative cycles",        r["neg_cycles"])
+
+    if viols:
+        st.success(f"🟡 {len(viols)} potential arbitrage opportunity{'s' if len(viols) != 1 else ''} detected")
+        viol_df = pd.DataFrame(viols)
+
+        def gap_color(val):
+            if val >= 30: return "background-color: #7f1d1d; color: white"
+            if val >= 20: return "background-color: #991b1b; color: white"
+            return "background-color: #b45309; color: white"
+
+        styled_viols = viol_df.style \
+            .map(gap_color, subset=["Gap %"]) \
+            .format({
+                "P(A) %":    "{:.1f}%",
+                "P(B) %":    "{:.1f}%",
+                "Gap %":     "{:.1f}%",
+                "Vol A ($)": "${:,.0f}",
+                "Vol B ($)": "${:,.0f}",
+            })
+
+        st.dataframe(styled_viols, use_container_width=True, hide_index=True)
+        st.caption(
+            "A violation means two logically related markets have a probability gap that may be exploitable. "
+            "Higher gap = stronger signal. Always verify liquidity before trading."
+        )
+    else:
+        st.info("No violations found with current filters. Try lowering the minimum gap.")
