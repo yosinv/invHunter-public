@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+import requests
 import streamlit as st
 import yfinance as yf
 from dotenv import load_dotenv
@@ -415,3 +416,125 @@ if "analysis" in st.session_state:
     st.dataframe(styled_res, use_container_width=True, hide_index=True)
 else:
     st.info("Click **Run Claude Analysis** in the sidebar to get trading recommendations.")
+
+st.divider()
+
+# ─── Polymarket ───────────────────────────────────────────────────────────────
+st.subheader("🎯 Polymarket — Prediction Markets")
+
+POLYMARKET_TAGS = ["israel", "middle east", "economy", "finance", "fed", "inflation", "war", "tech"]
+
+@st.cache_data(ttl=300)
+def fetch_polymarket_markets(limit: int = 50) -> pd.DataFrame:
+    try:
+        resp = requests.get(
+            "https://gamma-api.polymarket.com/markets",
+            params={"limit": limit, "active": "true", "closed": "false"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        markets = resp.json()
+    except Exception as e:
+        return pd.DataFrame(), str(e)
+
+    rows = []
+    for m in markets:
+        outcomes = m.get("outcomes", "[]")
+        if isinstance(outcomes, str):
+            try:
+                outcomes = json.loads(outcomes)
+            except Exception:
+                outcomes = []
+        prices = m.get("outcomePrices", "[]")
+        if isinstance(prices, str):
+            try:
+                prices = json.loads(prices)
+            except Exception:
+                prices = []
+
+        yes_price = None
+        no_price = None
+        if len(outcomes) == 2 and len(prices) == 2:
+            for idx, o in enumerate(outcomes):
+                if str(o).lower() == "yes":
+                    try:
+                        yes_price = round(float(prices[idx]) * 100, 1)
+                    except Exception:
+                        pass
+                elif str(o).lower() == "no":
+                    try:
+                        no_price = round(float(prices[idx]) * 100, 1)
+                    except Exception:
+                        pass
+
+        volume = m.get("volumeNum") or m.get("volume")
+        try:
+            volume = float(volume) if volume else 0.0
+        except Exception:
+            volume = 0.0
+
+        rows.append({
+            "Market": m.get("question", "—"),
+            "YES %": yes_price,
+            "NO %": no_price,
+            "Volume ($)": volume,
+            "End Date": (m.get("endDate") or "")[:10],
+            "URL": m.get("url", ""),
+        })
+
+    df_pm = pd.DataFrame(rows)
+    if not df_pm.empty:
+        df_pm = df_pm.sort_values("Volume ($)", ascending=False).reset_index(drop=True)
+    return df_pm, None
+
+
+with st.spinner("Fetching Polymarket data..."):
+    pm_df, pm_err = fetch_polymarket_markets()
+
+if pm_err:
+    st.error(f"Polymarket fetch error: {pm_err}")
+elif pm_df.empty:
+    st.warning("No Polymarket data available.")
+else:
+    poly_col1, poly_col2 = st.columns([3, 1])
+    with poly_col1:
+        pm_search = st.text_input("Filter markets", placeholder="e.g. israel, fed, crypto…", label_visibility="collapsed")
+    with poly_col2:
+        pm_limit = st.selectbox("Show", [25, 50, 100], index=1, label_visibility="collapsed")
+
+    filtered = pm_df.head(pm_limit)
+    if pm_search.strip():
+        mask = filtered["Market"].str.contains(pm_search.strip(), case=False, na=False)
+        filtered = filtered[mask]
+
+    def pm_yes_color(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        if val >= 70:
+            return "color: #22c55e; font-weight: bold"
+        if val <= 30:
+            return "color: #ef4444"
+        return "color: #facc15"
+
+    def pm_no_color(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        if val >= 70:
+            return "color: #ef4444; font-weight: bold"
+        if val <= 30:
+            return "color: #22c55e"
+        return "color: #facc15"
+
+    display_pm = filtered[["Market", "YES %", "NO %", "Volume ($)", "End Date"]].copy()
+
+    styled_pm = display_pm.style \
+        .map(pm_yes_color, subset=["YES %"]) \
+        .map(pm_no_color, subset=["NO %"]) \
+        .format({
+            "YES %": lambda x: f"{x:.1f}%" if x is not None and not (isinstance(x, float) and pd.isna(x)) else "—",
+            "NO %": lambda x: f"{x:.1f}%" if x is not None and not (isinstance(x, float) and pd.isna(x)) else "—",
+            "Volume ($)": lambda x: f"${x:,.0f}" if x else "—",
+        })
+
+    st.dataframe(styled_pm, use_container_width=True, hide_index=True)
+    st.caption(f"Showing {len(filtered)} of {len(pm_df)} active markets · Refreshes every 5 min")
