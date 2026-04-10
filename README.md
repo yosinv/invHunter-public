@@ -1,7 +1,7 @@
 # invHunter 📈
 
-An AI-powered algorithmic trading agent for the **Tel Aviv Stock Exchange (TASE)**.
-Uses Claude AI to analyze stocks, make trading decisions, and notify you via Telegram, email, and Mac notifications.
+An AI-powered algorithmic trading platform for the **Tel Aviv Stock Exchange (TASE)** and **Polymarket prediction markets**.
+Uses Claude AI to analyze stocks, detect arbitrage opportunities, make trading decisions, and notify you via Telegram, email, and Mac notifications.
 
 ---
 
@@ -11,7 +11,7 @@ Uses Claude AI to analyze stocks, make trading decisions, and notify you via Tel
 yfinance (free, end-of-day data)
         │
         ▼
-  get_stock_data()        ← fetches prices, SMAs, volume, P/E
+  get_stock_data()        ← fetches prices, SMAs, volume, P/E (agorot → ILS ÷100)
         │
         ▼
    ask_claude()           ← sends data to Claude API → gets buy/sell/hold JSON
@@ -27,10 +27,10 @@ yfinance (free, end-of-day data)
 Every trading day (Sun–Thu), the agent:
 1. Fetches end-of-day data for each stock in your watchlist
 2. Sends it to Claude with your portfolio context
-3. Gets a structured trading decision back (action, quantity, price, stop-loss, reasoning)
+3. Gets a structured decision back (action, quantity, price, stop-loss, reasoning)
 4. Skips low-confidence signals
-5. Asks for manual confirmation before placing live orders
-6. Places limit orders via Interactive Brokers TWS
+5. Saves analysis to `analysis/YYYY-MM-DD_HH-MM-SS.json`
+6. Places limit orders via Interactive Brokers TWS (paper or live)
 
 ---
 
@@ -38,10 +38,13 @@ Every trading day (Sun–Thu), the agent:
 
 ```
 invHunter/
-├── tase_claude_agent.py   # Main trading agent
-├── bot.py                 # Telegram bot (interactive remote control)
+├── tase_claude_agent.py   # Main trading agent (CLI)
+├── dashboard.py           # Streamlit web dashboard
+├── bot.py                 # Telegram bot (remote control)
 ├── notify.py              # Morning alert: Mac + Telegram + Email
 ├── SETUP.txt              # Quick setup reference
+├── GRAPH_ARB_SCANNER.md   # Graph arbitrage scanner documentation
+├── analysis/              # Saved Claude analysis runs (gitignored)
 ├── .env                   # Your credentials (gitignored)
 └── .venv/                 # Python virtual environment (gitignored)
 ```
@@ -62,7 +65,7 @@ source .venv/bin/activate
 ### 2. Install dependencies
 
 ```bash
-pip install ib_insync yfinance anthropic pandas python-dotenv python-telegram-bot requests
+pip install ib_insync yfinance anthropic pandas python-dotenv python-telegram-bot streamlit networkx requests
 ```
 
 ### 3. Configure credentials
@@ -120,38 +123,55 @@ WATCHLIST = [
 ]
 ```
 
-> **TASE ticker format:** Use the base ticker (e.g. `BEZQ`), not the `.TA` suffix — the agent appends it automatically for yfinance.
+> **TASE ticker format:** Use the base ticker (e.g. `BEZQ`), not the `.TA` suffix.
+> **Price note:** yfinance returns TASE prices in agorot — the agent divides by 100 automatically to get ILS.
 
 ---
 
 ## Running
 
-### Run the trading agent
+### Streamlit Dashboard (recommended)
 
 ```bash
 source .venv/bin/activate
-python tase_claude_agent.py
+streamlit run dashboard.py
 ```
 
-Make sure TWS is open and connected before running.
+Opens at **http://localhost:8501**. Features:
+- Live price table with SMA indicators
+- Claude analysis with per-stock BUY/HOLD/SELL decisions
+- Execute button per BUY signal → sends limit order to IBKR TWS
+- Show Latest Analysis button → loads last saved run
+- Paper/Live toggle in sidebar
+- Polymarket Graph Arbitrage Scanner
 
-### Start the Telegram bot
+### Telegram Bot
 
 ```bash
 source .venv/bin/activate
 python bot.py
 ```
 
-Then from Telegram, send commands to your bot:
+Commands:
 
 | Command | What it does |
 |---|---|
 | `/start` | Welcome message + command list |
 | `/prices` | Instant price snapshot for all watchlist stocks |
-| `/run` | Full Claude analysis — sends buy signals and hold summary |
+| `/run` | Full Claude analysis — saves to file, sends BUY signals + full summary |
+| `/last` | Show the last saved analysis |
 | `/help` | List commands |
 
-### Send a morning reminder
+### CLI Agent (headless)
+
+```bash
+source .venv/bin/activate
+python tase_claude_agent.py
+```
+
+Runs the full analysis loop and places orders via TWS. Requires TWS to be open.
+
+### Morning Reminder
 
 ```bash
 python notify.py
@@ -161,21 +181,19 @@ Sends a "time to run invHunter" alert via Mac notification, Telegram, and email.
 
 ---
 
-## Automation (run every trading day)
+## Automation
 
-A cron job fires at 09:00 Israel time (06:00 UTC) every Sunday–Thursday:
+Cron job at 09:00 Israel time (06:00 UTC) every Sunday–Thursday:
 
 ```
 0 6 * * 0-4 /path/to/invHunter/.venv/bin/python notify.py >> notify.log 2>&1
 ```
 
-To add it: `crontab -e`
+To add: `crontab -e`
 
 ---
 
 ## Watchlist
-
-Current stocks tracked:
 
 | Ticker | Company | Sector |
 |---|---|---|
@@ -193,16 +211,43 @@ Current stocks tracked:
 | REKA | Reka Defense | Defense |
 | EMDV | Elad Defense | Defense |
 | KARE | Kareen | Defense Electronics |
+| EVGN | Evogene | Biotech |
+| MDIN | Modiin Yehsh | Real Estate |
+| DRAL | Drall Electronic Industries | Defense |
+| PLSN | Plasan | Defense (Armor) |
+| ISRS | Israel Shipyards | Defense / Naval |
+| TDRN | Tadiran Electronics | Defense / Comms |
+| CYBR | CyberArk | Cyber Security |
+| GILT | Gilat Satellite Networks | Defense / Satellite |
+| SPEN | SpaceCom | Defense / Satellite |
+| RATI | Rati | Defense Electronics |
+| CAMT | Camtek | Defense Tech |
+| NVMI | Nova Measuring Instruments | Defense Tech |
+
+---
+
+## Graph Arbitrage Scanner (Polymarket)
+
+Built into the dashboard. Detects probability violations across related Polymarket prediction markets using graph theory and the Bellman-Ford algorithm.
+
+- Fetches 300 active markets from the Polymarket Gamma API
+- Tags each market by topic (Israel, Iran, Trump, Fed, Bitcoin, etc.)
+- Builds a directed graph — edges weighted by `-log(probability)`
+- Flags pairs where `|P(A) - P(B)| ≥ threshold` (default 15%)
+- Detects negative cycles (guaranteed theoretical arbitrage) via Bellman-Ford
+
+See [GRAPH_ARB_SCANNER.md](GRAPH_ARB_SCANNER.md) for full documentation.
 
 ---
 
 ## Safety Features
 
 - **Paper trading by default** — `PAPER_TRADING = True` until you explicitly switch
-- **Hard position cap** — `MAX_POSITION_ILS` is enforced in code, Claude cannot exceed it
-- **Low-confidence skip** — signals with `confidence: low` are never executed
-- **Manual confirmation** — live orders require you to type `yes` in the terminal before placing
-- **Credentials in `.env`** — never committed to git (`.gitignore`d)
+- **Hard position cap** — `MAX_POSITION_ILS` enforced in code, Claude cannot exceed it
+- **Low-confidence skip** — `confidence: low` signals are never executed
+- **Manual confirmation** — live orders require `yes` in terminal (CLI) or Execute button click (dashboard)
+- **Credentials in `.env`** — never committed to git
+- **Analysis saved locally** — every run saved to `analysis/` folder, gitignored
 
 ---
 
@@ -210,12 +255,10 @@ Current stocks tracked:
 
 | Source | What | Cost |
 |---|---|---|
-| yfinance | End-of-day prices, volume, P/E | Free |
+| yfinance | End-of-day TASE prices, volume, P/E | Free |
 | Claude API (Anthropic) | Trading decisions | Pay per use |
-| IBKR TWS API | Order execution, real-time data | Free with IBKR account |
-
-> TASE end-of-day data via Yahoo Finance uses `.TA` suffix tickers (e.g. `BEZQ.TA`).
-> Real-time data requires an active IBKR account with TWS running.
+| IBKR TWS API | Order execution | Free with IBKR account |
+| Polymarket Gamma API | Prediction market prices | Free |
 
 ---
 
