@@ -3,6 +3,12 @@
 An AI-powered algorithmic trading platform for the **Tel Aviv Stock Exchange (TASE)** and **Polymarket prediction markets**.
 Uses Claude AI to analyze stocks, detect arbitrage opportunities, make trading decisions, and notify you via Telegram, email, and Mac notifications.
 
+> ⚠️ **Disclaimer — read before running.** This is a personal research project, not financial advice.
+> It turns LLM output into buy/sell signals and can place real orders through Interactive Brokers.
+> LLMs make mistakes, market data can be wrong or stale, and you can lose money. Run it in paper
+> trading mode, review every signal yourself, and use it entirely at your own risk. The authors accept
+> no liability for any losses. See [LICENSE](LICENSE).
+
 ---
 
 ## How It Works
@@ -42,7 +48,9 @@ invHunter/
 ├── dashboard.py           # Streamlit web dashboard
 ├── bot.py                 # Telegram bot (remote control)
 ├── notify.py              # Morning alert: Mac + Telegram + Email
-├── SETUP.txt              # Quick setup reference
+├── requirements.txt       # Python dependencies
+├── .env.example           # Template for your .env
+├── LICENSE                # MIT
 ├── GRAPH_ARB_SCANNER.md   # Graph arbitrage scanner documentation
 ├── analysis/              # Saved Claude analysis runs (gitignored)
 ├── .env                   # Your credentials (gitignored)
@@ -65,12 +73,12 @@ source .venv/bin/activate
 ### 2. Install dependencies
 
 ```bash
-pip install ib_insync yfinance anthropic pandas python-dotenv python-telegram-bot streamlit networkx requests
+pip install -r requirements.txt
 ```
 
 ### 3. Configure credentials
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill it in:
 
 ```env
 # Anthropic (Claude API)
@@ -78,7 +86,12 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 # Telegram bot
 TELEGRAM_BOT_TOKEN=your-bot-token
-TELEGRAM_CHAT_ID=your-chat-id
+TELEGRAM_CHAT_ID=your-chat-id     # the bot ONLY answers these chat IDs (comma-separated)
+
+# Trading limits & mode
+PORTFOLIO_ILS=50000
+MAX_POSITION_ILS=10000
+LIVE_TRADING=false                # must be exactly "true" to allow live orders
 
 # Email (Gmail)
 EMAIL_FROM=you@gmail.com
@@ -108,12 +121,10 @@ EMAIL_PORT=587
 
 ### 5. Edit your config
 
-Open `tase_claude_agent.py` and adjust:
+Portfolio size, position cap and live/paper mode come from `.env` (see above).
+Open `tase_claude_agent.py` to adjust the risk level and watchlist:
 
 ```python
-PAPER_TRADING = True          # Start with True — switch to False only when ready
-MAX_POSITION_ILS = 10000      # Max ₪ per trade
-PORTFOLIO_ILS = 50000         # Your total portfolio size
 RISK_LEVEL = "medium"         # "low" | "medium" | "high"
 
 WATCHLIST = [
@@ -242,7 +253,8 @@ See [GRAPH_ARB_SCANNER.md](GRAPH_ARB_SCANNER.md) for full documentation.
 
 ## Safety Features
 
-- **Paper trading by default** — `PAPER_TRADING = True` until you explicitly switch
+- **Paper trading by default** — live orders are impossible unless `LIVE_TRADING=true` is set in `.env`
+- **Telegram allowlist** — the bot ignores every chat not listed in `TELEGRAM_CHAT_ID` and refuses to start without it
 - **Hard position cap** — `MAX_POSITION_ILS` enforced in code, Claude cannot exceed it
 - **Low-confidence skip** — `confidence: low` signals are never executed
 - **Manual confirmation** — live orders require `yes` in terminal (CLI) or Execute button click (dashboard)

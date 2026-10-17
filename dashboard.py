@@ -30,8 +30,8 @@ WATCHLIST = [
     "DRAL", "PLSN", "ISRS", "TDRN", "CYBR",
     "GILT", "SPEN", "RATI", "CAMT", "NVMI",
 ]
-PORTFOLIO_ILS = 50000
-MAX_POSITION_ILS = 10000
+PORTFOLIO_ILS = int(os.environ.get("PORTFOLIO_ILS", "50000"))      # set in .env
+MAX_POSITION_ILS = int(os.environ.get("MAX_POSITION_ILS", "10000"))  # set in .env
 RISK_LEVEL = "medium"
 
 SECTOR_MAP = {
@@ -151,7 +151,11 @@ with st.sidebar:
     selected_sector = st.selectbox("Sector", sectors)
     st.divider()
     st.markdown("**IBKR Connection**")
-    paper_mode = st.toggle("Paper Trading", value=True)
+    live_allowed = os.environ.get("LIVE_TRADING", "").lower() == "true"
+    paper_mode = st.toggle("Paper Trading", value=True, disabled=not live_allowed,
+                           help=None if live_allowed else "Set LIVE_TRADING=true in .env to enable live orders")
+    if not live_allowed:
+        paper_mode = True
     ibkr_port = 7497 if paper_mode else 7496
     st.caption(f"Port: {ibkr_port} ({'📄 Paper' if paper_mode else '💰 LIVE'})")
     if not paper_mode:

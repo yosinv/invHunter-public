@@ -1,0 +1,9 @@
+anthropic
+ib_insync
+yfinance
+pandas
+python-dotenv
+python-telegram-bot>=20
+streamlit
+networkx
+requests

@@ -42,8 +42,8 @@ WATCHLIST = [
     "DRAL", "PLSN", "ISRS", "TDRN", "CYBR",
     "GILT", "SPEN", "RATI", "CAMT", "NVMI",
 ]
-PORTFOLIO_ILS = 50000
-MAX_POSITION_ILS = 10000
+PORTFOLIO_ILS = int(os.environ.get("PORTFOLIO_ILS", "50000"))      # set in .env
+MAX_POSITION_ILS = int(os.environ.get("MAX_POSITION_ILS", "10000"))  # set in .env
 RISK_LEVEL = "medium"
 
 
@@ -144,6 +144,23 @@ def format_result_line(r: dict) -> str:
 
 
 # ─── Bot Handlers ─────────────────────────────────
+ALLOWED_CHAT_IDS = {
+    int(x) for x in os.environ.get("TELEGRAM_CHAT_ID", "").replace(" ", "").split(",") if x
+}
+
+
+def authorized(handler):
+    """Only respond to chat IDs listed in TELEGRAM_CHAT_ID (comma-separated)."""
+    async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        chat = update.effective_chat
+        if chat is None or chat.id not in ALLOWED_CHAT_IDS:
+            log.warning(f"Rejected command from unauthorized chat {chat.id if chat else '?'}")
+            return
+        return await handler(update, ctx)
+    return wrapper
+
+
+@authorized
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 *invHunter Bot*\n\n"
@@ -155,10 +172,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@authorized
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await cmd_start(update, ctx)
 
 
+@authorized
 async def cmd_prices(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📡 Fetching prices...")
     lines = ["📊 *TASE Prices*\n"]
@@ -172,6 +191,7 @@ async def cmd_prices(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+@authorized
 async def cmd_run(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Running Claude analysis on all stocks... (~2 min)")
 
@@ -250,6 +270,7 @@ async def cmd_run(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❓ Errors: {', '.join(r['ticker'] for r in errors)}")
 
 
+@authorized
 async def cmd_last(update: Update, _ctx: ContextTypes.DEFAULT_TYPE):
     analysis = load_last_analysis()
     if not analysis:
@@ -285,6 +306,8 @@ async def cmd_last(update: Update, _ctx: ContextTypes.DEFAULT_TYPE):
 # ─── Main ─────────────────────────────────────────
 def main():
     token = os.environ["TELEGRAM_BOT_TOKEN"]
+    if not ALLOWED_CHAT_IDS:
+        raise SystemExit("TELEGRAM_CHAT_ID must be set — the bot refuses to run open to everyone.")
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))

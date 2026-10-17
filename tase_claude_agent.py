@@ -31,9 +31,9 @@ load_dotenv()
 # ─────────────────────────────────────────────
 # CONFIG — edit these
 # ─────────────────────────────────────────────
-PAPER_TRADING = True           # True = paper (port 7497), False = live (port 7496)
-MAX_POSITION_ILS = 10000       # Max ₪ per single trade (hard limit, Claude cannot exceed this)
-PORTFOLIO_ILS = 50000          # Your total portfolio size in ₪
+PAPER_TRADING = os.environ.get("LIVE_TRADING", "").lower() != "true"  # live only if LIVE_TRADING=true
+MAX_POSITION_ILS = int(os.environ.get("MAX_POSITION_ILS", "10000"))  # Max ₪ per single trade (hard limit)
+PORTFOLIO_ILS = int(os.environ.get("PORTFOLIO_ILS", "50000"))     # Your total portfolio size in ₪ (set in .env)
 RISK_LEVEL = "medium"          # "low" | "medium" | "high"
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
