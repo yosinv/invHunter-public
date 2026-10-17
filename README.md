@@ -64,8 +64,8 @@ invHunter/
 ### 1. Clone & create virtual environment
 
 ```bash
-git clone https://github.com/yosinv/invHunter.git
-cd invHunter
+git clone https://github.com/yosinv/invHunter-public.git
+cd invHunter-public
 python3 -m venv .venv
 source .venv/bin/activate
 ```
